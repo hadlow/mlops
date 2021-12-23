@@ -31,9 +31,9 @@ def process_label_file(label_file):
     labels = np.asarray(st.unpack('>' + 'B' * n_labels, label_file.read(n_labels)))
 
     targets = np.array([labels]).reshape(-1)
-    targets = torch.tensor(targets)
 
     one_hot_labels = np.eye(10)[targets]
+    one_hot_labels = torch.tensor(one_hot_labels)
 
     return one_hot_labels
 
@@ -63,16 +63,20 @@ class Net(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.log_softmax(self.fc2(x))
 
+        return x
+
 ((train_images, test_images), (train_labels, test_labels)) = dataset()
 train_images, test_images = train_images / 255.0, test_images / 255.0
 
 n_training_examples = 60000
-n_epochs = 3
+n_epochs = 1
 batch_size_train = 64
 batch_size_test = 1000
 learning_rate = 0.01
 momentum = 0.5
-log_interval = 10
+log_interval = 1000
+batch_id = 0
+train_losses = []
 
 network = Net()
 optimizer = optim.SGD(network.parameters(), lr = learning_rate, momentum = momentum)
@@ -81,8 +85,11 @@ for epoch in range(n_epochs):
     network.train()
 
     shuffle_index = np.random.permutation(n_training_examples)
+    batch_id = 0
 
     for batch_start in shuffle_index:
+        batch_id = batch_id + 1
+
         batch_end = batch_start + batch_size_train
 
         batch_x = train_images[batch_start:batch_end]
@@ -90,38 +97,11 @@ for epoch in range(n_epochs):
 
         optimizer.zero_grad()
         output = network(batch_x)
-        loss = F.nll_loss(output, batch_y)
+        loss = F.nll_loss(output, torch.max(batch_y, 1)[1])
         loss.backward()
         optimizer.step()
 
-        if batch_idx % log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-            epoch, batch_idx * len(data), len(train_loader.dataset),
-            100. * batch_idx / len(train_loader), loss.item()))
+        if batch_id % log_interval == 0:
+            print("Batch: {}, Epoch: {}, train loss: {}", batch_id, format(epoch + 1), format(loss.item()))
             train_losses.append(loss.item())
-            train_counter.append(
-            (batch_idx*64) + ((epoch-1)*len(train_loader.dataset)))
 
-"""
-for j in range(n_epochs):
-    shuffle_index = np.random.permutation(n_training_examples)
-
-    for batch_start in shuffle_index:
-        batch_end = batch_start + n_samples
-
-        batch_x = train_images[batch_start:batch_end]
-        batch_y = train_labels[batch_start:batch_end]
-        
-        forward(batch_x)
-        backward(batch_x, batch_y)
-        
-        layer1.w = layer1.w - learning_rate * layer1.d_w.T
-        layer1.b = layer1.b - learning_rate * layer1.d_b
-        layer2.w = layer2.w - learning_rate * layer2.d_w.T
-        layer2.b = layer2.b - learning_rate * layer2.d_b
-
-    forward(test_images)
-    test_loss = batch_loss(test_labels, activation2.a)
-
-    print("€poch {}, test loss: {}", format(j + 1), format(test_loss))
-"""
